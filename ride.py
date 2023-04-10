@@ -1,6 +1,8 @@
 import pandas as pd
 import random
 from datetime import datetime
+import heapq
+
 
 file_path = "keskused.xlsx"
 
@@ -15,7 +17,7 @@ first_point = 'Endla 47, 10615, Tallinn'
 min_length = 1117
 max_length = 1190
 
-mileage = 0
+mileages = []  # set of 12 mileages that
 start_number = 314092
 
 visited_locations = set()
@@ -33,55 +35,56 @@ def create_mileage():
 def do_work(month_name):
     global mileage, visited_locations
     mileage = 0  # Reset the mileage variable for each iteration
-    attempts = 0  # Add a counter for attempts
-    max_attempts = 1000  # Set a maximum limit for attempts
+    candidates = []
 
-    while mileage < min_length and attempts < max_attempts:
-        added_mileage, center_data = create_mileage()
-        if (mileage + added_mileage) <= max_length:
-            mileage += added_mileage
+    for _ in range(10):  # Generate 10 candidates
+        mileage_candidate = 0
+        visited_locations_candidate = set()
 
-            print(f"{month_name}: {first_point} - {center_data['Keskuse nimi']} - {center_data['Aadress']} - {first_point} | {mileage:.1f} km | {start_number + mileage:.1f}")
+        while mileage_candidate < min_length:
+            row_number = random.choice(list(data_dict.keys()))
+            if row_number not in visited_locations_candidate:
+                center_data = data_dict[row_number]
+                added_mileage = 2 * center_data['Kaugus aadressilt (km)']
+                visited_locations_candidate.add(row_number)
 
-            if mileage >= max_length:
-                save_data(visited_locations)
-                visited_locations.clear()
-                break  # Exit the loop when successful
-        else:
-            attempts += 1  # Increment the counter if the location is not suitable
-            if attempts >= max_attempts:
-                print(f"Unable to find suitable locations for month {month_name} after {max_attempts} attempts. Current mileage: {mileage:.1f} km")
-                save_data(visited_locations)
-                visited_locations.clear()
-                break
+                if (mileage_candidate + added_mileage) <= max_length:
+                    mileage_candidate += added_mileage
+                else:
+                    break
 
-def save_data(locations):
-    global start_number
-    filename = f"data_set_{start_number}.txt"
-    with open(filename, "w") as f:
-        f.write("\n".join(str(l) for l in locations))
-    start_number += 1
+        # Add the candidate mileage and visited_locations to the candidates list
+        candidates.append((mileage_candidate, visited_locations_candidate))
 
-def print_all_data():
-    current_time = datetime.now().strftime("%H:%M:%S")
-    output_filename = f"{current_time}.txt"
+    # Select the smallest mileage variant over min_length or the second best
+    candidates.sort(key=lambda x: x[0])  # Sort candidates by mileage
+    best_candidate = None
+    for candidate in candidates:
+        if candidate[0] >= min_length:
+            best_candidate = candidate
+            break
 
-    with open(output_filename, "w") as output_file:
-        for i in range(1, 13):
-            output_file.write(f"Month {i}:\n")
-            for j in range(1, start_number - 314091):
-                filename = f"data_set_{j}.txt"
-                with open(filename, "r") as f:
-                    lines = f.readlines()
-                    for line in lines:
-                        parts = line.strip().split(" - ")
-                        output_file.write(f"{parts[1]} - {parts[2]} - {parts[3]} - {parts[0]}\n")
-            output_file.write("\n")
+    if best_candidate is None:
+        # If no candidate meets the condition, select the second best
+        best_candidate = heapq.nsmallest(2, candidates, key=lambda x: x[0])[-1]
+
+    mileage, visited_locations = best_candidate
+
+    # Print the output for the best candidate
+    for row_number in visited_locations:
+        center_data = data_dict[row_number]
+        print(
+            f"{month_name}: {first_point} - {center_data['Keskuse nimi']} - {center_data['Aadress']} - {first_point} | {mileage:.1f} km | {start_number + mileage:.1f}")
+
+    return mileage  # Return the mileage
+
 # Call the do_work function
 month_names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 for month_name in month_names:
     print("--------------------------------------------------")  # Add this line to print dashes between month changes
-    do_work(month_name)
-# Print all the data sets
-print_all_data()
+    monthly_mileage = do_work(month_name)
+    mileages.append(monthly_mileage)
+
+print("--------------------------------------------------")
+print("Mileages:", ["{:.2f}".format(m) for m in mileages])
